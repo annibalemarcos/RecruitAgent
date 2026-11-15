@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix Agente de Recrutamento & Candidaturas",
+  "description": "Pesquisa contatos de recrutamento em sites de empresas, analisa carreiras e gera materiais de candidatura personalizados com IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

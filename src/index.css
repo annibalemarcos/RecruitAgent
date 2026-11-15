@@ -1,0 +1,30 @@
+/* Only application source files supply CSS classes. Runtime data is never scanned. */
+@import "tailwindcss" source(none);
+@source "./";
+@source "../index.html";
+
+/* Tema claro selecionável nas configurações. */
+html[data-theme="light"] body { background: #f1f5f9; color: #0f172a; }
+html[data-theme="light"] .bg-slate-950 { background-color: #f8fafc; }
+html[data-theme="light"] .bg-slate-950\/60,
+html[data-theme="light"] .bg-slate-950\/70,
+html[data-theme="light"] .bg-slate-950\/80 { background-color: #f1f5f9; }
+html[data-theme="light"] .bg-slate-900,
+html[data-theme="light"] .bg-slate-900\/90 { background-color: #ffffff; }
+html[data-theme="light"] .bg-slate-800 { background-color: #e2e8f0; }
+html[data-theme="light"] .border-slate-800,
+html[data-theme="light"] .border-slate-700,
+html[data-theme="light"] .border-slate-700\/80 { border-color: #cbd5e1; }
+html[data-theme="light"] .text-white,
+html[data-theme="light"] .text-slate-100 { color: #0f172a; }
+html[data-theme="light"] .text-slate-200 { color: #1e293b; }
+html[data-theme="light"] .text-slate-300 { color: #334155; }
+html[data-theme="light"] .text-slate-400 { color: #64748b; }
+html[data-theme="light"] .text-slate-500 { color: #64748b; }
+html[data-theme="light"] .hover\:bg-slate-800:hover { background-color: #e2e8f0; }
+html[data-theme="light"] input:not([type="checkbox"]),
+html[data-theme="light"] textarea,
+html[data-theme="light"] select { color-scheme: light; }
+html[data-theme="light"] input:not([type="checkbox"]),
+html[data-theme="light"] textarea,
+html[data-theme="light"] select { background-color: #fff; color: #1e293b; border-color: #cbd5e1; }
