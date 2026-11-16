@@ -1,0 +1,77 @@
+{
+  "name": "Marcos Annibale",
+  "email": "marcospoannibale@gmail.com",
+  "phone": "+55 (11) 98765-4321",
+  "location": "São Paulo, Brasil",
+  "summary": "Engenheiro de Software Sênior e Especialista Full Stack com mais de 8 anos de experiência desenvolvendo plataformas escaláveis, APIs de alta performance e microsserviços em nuvem. Histórico comprovado de liderança técnica em arquiteturas distribuídas, resiliência de sistemas e otimização de fluxos críticos de pagamento e dados.",
+  "summaryEn": "Senior Full Stack Software Engineer and Tech Lead with over 8 years of experience building resilient cloud microservices, high-throughput APIs, and distributed architectures. Proven track record leading agile engineering teams and optimizing mission-critical financial and distributed systems.",
+  "targetRoles": [
+    "Senior Full Stack Engineer",
+    "Tech Lead",
+    "Senior Backend Engineer",
+    "Staff Software Engineer"
+  ],
+  "prioritySkills": [
+    "TypeScript",
+    "Node.js",
+    "React",
+    "PostgreSQL",
+    "Docker",
+    "AWS / GCP",
+    "Arquitetura de Microsserviços",
+    "GraphQL",
+    "Design de APIs RESTful",
+    "CI/CD"
+  ],
+  "workPreference": "remote",
+  "professionalLinks": [
+    {
+      "label": "LinkedIn",
+      "url": "https://linkedin.com/in/marcos-annibale"
+    },
+    {
+      "label": "GitHub",
+      "url": "https://github.com/marcosannibale"
+    },
+    {
+      "label": "Portfólio",
+      "url": "https://marcosannibale.dev"
+    }
+  ],
+  "experiences": [
+    {
+      "role": "Staff Software Engineer / Tech Lead",
+      "company": "OmniScale Tech",
+      "period": "2022 - Atual",
+      "highlights": [
+        "Liderou a arquitetura de processamento em tempo real lidando com mais de 15 milhões de eventos diários com 99,99% de SLA.",
+        "Reduziu os custos de infraestrutura em nuvem em 32% por meio de reengenharia de pipelines e cache distribuído.",
+        "Mentoria direta de uma equipe de 9 engenheiros de software seniores e plenos."
+      ]
+    },
+    {
+      "role": "Senior Full Stack Engineer",
+      "company": "FinFlow Soluções Digitais",
+      "period": "2019 - 2022",
+      "highlights": [
+        "Desenvolveu gateways de pagamento resilientes e integração com Open Finance utilizando TypeScript e PostgreSQL.",
+        "Implementou suíte de testes automatizados e observabilidade com tracing distribuído."
+      ]
+    }
+  ],
+  "education": [
+    "Bacharelado em Ciência da Computação – Universidade de São Paulo (USP)"
+  ],
+  "certifications": [
+    "AWS Certified Solutions Architect – Associate",
+    "Google Cloud Certified Professional Cloud Developer"
+  ],
+  "languages": [
+    "Português (Nativo)",
+    "Inglês (Avançado/Fluente)"
+  ],
+  "writingStyleSample": "Comunicação direta, analítica e elegante. Foco em soluções práticas, mensuráveis e impacto nos objetivos do negócio, sem formalismo excessivo ou jargões vazios.",
+  "additionalNotes": "Foco prioritário em posições remotas ou híbridas em São Paulo.",
+  "materialLanguage": "both",
+  "parsedFromCv": true
+}

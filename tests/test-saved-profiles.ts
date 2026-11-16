@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { API_KEY_FIELDS, exportConfig } from '../src/apiCredentialsJson.js';
+import { API_KEY_FIELDS, SERVICE_CONFIG_FIELDS, exportConfig } from '../src/apiCredentialsJson.js';
 import {
   buildSavedProfile,
   configToSettings,
@@ -19,6 +19,7 @@ const settings = (): any => {
     geminiModel: 'gemini-test', openrouterModel: 'model/test',
   };
   for (const field of API_KEY_FIELDS) data[field] = 'FAKE_TEST_' + field;
+  for (const field of SERVICE_CONFIG_FIELDS) data[field] = 'FAKE_TEST_' + field;
   return data;
 };
 const candidate = (): any => ({
@@ -48,16 +49,18 @@ test('Roundtrip completo: empresas, candidato e configurações com chaves', () 
   assert.equal(restored.aiProvider, 'openrouter');
   assert.equal(restored.maxConcurrency, 3);
   assert.equal(restored.defaultViewLanguage, 'en');
+  for (const field of SERVICE_CONFIG_FIELDS) assert.equal(restored[field], 'FAKE_TEST_' + field);
 });
 
 test('Sem chaves: modelos e ajustes ficam, chaves não entram no arquivo', () => {
   const saved = buildSavedProfile({ name: 'Sem chaves', blocks: { companies: false, candidate: false, settings: true }, includeApiKeys: false, companies: [], candidate: candidate(), settings: settings() });
   assert.equal(saved.includesApiKeys, false);
   assert.equal(countApiKeys(saved.config), 0);
-  assert.ok(!JSON.stringify(saved).includes('FAKE_TEST_'));
+  for (const field of API_KEY_FIELDS) assert.ok(!(field in saved.config!.credentials), `${field} deve ser removida sem a opção de incluir chaves`);
   const restored: any = configToSettings(saved.config!);
   assert.equal(restored.geminiModel, 'gemini-test');
   assert.equal(restored.geminiApiKey, undefined);
+  for (const field of SERVICE_CONFIG_FIELDS) assert.equal(restored[field], 'FAKE_TEST_' + field);
   assert.ok(!saved.companies && !saved.candidate);
 });
 

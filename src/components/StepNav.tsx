@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Upload, Play, Users, Download, TrendingUp, LayoutDashboard, Menu, X } from 'lucide-react';
+import { Upload, Play, Users, Download, TrendingUp, LayoutDashboard, Menu, X, Home, Mail } from 'lucide-react';
 
-export type StepId = 'input' | 'execution' | 'results' | 'tracking' | 'export' | 'overview';
+export type StepId = 'home' | 'input' | 'execution' | 'results' | 'tracking' | 'export' | 'overview' | 'email-materials';
 
 interface StepNavProps {
   currentStep: StepId;
@@ -28,6 +28,7 @@ export const StepNav: React.FC<StepNavProps> = ({
 }) => {
   const [sidebarExpanded, setSidebarExpanded] = useState(() => typeof window === 'undefined' || window.innerWidth >= 768);
   const steps: { id: StepId; label: string; icon: React.FC<{ className?: string }>; badge?: string | number }[] = [
+    { id: 'home', label: '0. Início', icon: Home },
     {
       id: 'input',
       label: '1. Entrada & Perfil',
@@ -58,7 +59,8 @@ export const StepNav: React.FC<StepNavProps> = ({
       icon: Download,
       badge: materialsCount > 0 ? `${materialsCount} prontos` : undefined,
     },
-    { id: 'overview', label: '6. Visão Geral', icon: LayoutDashboard, badge: undefined },
+    { id: 'email-materials', label: '6. Emails & Materiais', icon: Mail, badge: undefined },
+    { id: 'overview', label: '7. Visão Geral', icon: LayoutDashboard, badge: undefined },
   ];
 
   return (

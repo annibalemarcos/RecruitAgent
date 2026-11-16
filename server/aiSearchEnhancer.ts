@@ -6,6 +6,7 @@ import { verifyEmailSources } from './emailVerification.js';
 import { executeGemini } from './materialsGenerator.js';
 import { callOpenAIJson } from './openai.js';
 import { callPerplexityJson } from './perplexity.js';
+import { callCompatibleAiJson, resolveCompatibleAi } from './compatibleAi.js';
 import {
   resolveGeminiCredentials,
   resolveOpenRouterCredentials,
@@ -32,7 +33,7 @@ export interface AISearchResult {
     justification: string;
     evidenceSnippet: string;
   }[];
-  sourceProvider: 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'brave' | 'you' | 'exa';
+  sourceProvider: 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'deepseek' | 'groq' | 'brave' | 'you' | 'exa' | 'tavily';
   providerName: string;
 }
 
@@ -64,7 +65,7 @@ export async function enhanceCompanySearchWithAI(
   const perplexityCircuit = isProviderCircuitBlocked('perplexity');
 
   interface CandidateProvider {
-    type: 'gemini' | 'openai' | 'perplexity' | 'openrouter';
+    type: 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'deepseek' | 'groq';
     name: string;
     model: string;
     key: string;
@@ -105,9 +106,13 @@ export async function enhanceCompanySearchWithAI(
     key: openrouterRes.key, source: openrouterRes.source,
     isBlocked: isProviderCircuitBlocked('openrouter').blocked,
   };
+  const deepseekRes = resolveCompatibleAi('deepseek', settings);
+  const deepseekCandidate: CandidateProvider = { type: 'deepseek', name: 'DeepSeek', model: deepseekRes.model, key: deepseekRes.key, source: deepseekRes.source, isBlocked: isProviderCircuitBlocked('deepseek').blocked };
+  const groqRes = resolveCompatibleAi('groq', settings);
+  const groqCandidate: CandidateProvider = { type: 'groq', name: 'Groq', model: groqRes.model, key: groqRes.key, source: groqRes.source, isBlocked: isProviderCircuitBlocked('groq').blocked };
   const providersToTry: CandidateProvider[] = [];
 
-  const allCandidates = [geminiCandidate, openaiCandidate, perplexityCandidate, openrouterCandidate];
+  const allCandidates = [geminiCandidate, openaiCandidate, perplexityCandidate, openrouterCandidate, deepseekCandidate, groqCandidate];
   if (providerMode !== 'auto') {
     const preferred = allCandidates.find(c => c.type === providerMode);
     if (preferred) providersToTry.push(preferred);
@@ -118,7 +123,7 @@ export async function enhanceCompanySearchWithAI(
   if (configured.length === 0) {
     onLog?.(
       'info',
-      `[Busca IA ignorada] Nenhuma API de IA (Gemini, ChatGPT, Perplexity, OpenRouter) está configurada com chave válida.`
+      `[Busca IA ignorada] Nenhuma API de IA (Gemini, ChatGPT, Perplexity, OpenRouter, DeepSeek, Groq) está configurada com chave válida.`
     );
     return webResult;
   }
@@ -181,6 +186,8 @@ Formato JSON esperado:
         parsed = await callOpenRouterJson(systemInstruction, prompt, settings);
       } else if (prov.type === 'perplexity') {
         parsed = await callPerplexityJson(systemInstruction, prompt, prov.model, prov.key);
+      } else if (prov.type === 'deepseek' || prov.type === 'groq') {
+        parsed = await callCompatibleAiJson(prov.type, systemInstruction, prompt, prov.model, prov.key, settings?.externalApiTimeoutMs);
       }
 
       if (parsed && typeof parsed === 'object') {

@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import {API_KEY_FIELDS, exportApiCredentials, importApiCredentials} from '../src/apiCredentialsJson.js';
 let count=0;
 const test=(name:string,fn:()=>void)=>{fn();console.log('PASS '+name);count++;};
-test('Roundtrip das oito APIs e modelos sem outras configurações',()=>{
- const data:any={aiProvider:'auto',maxPagesPerCompany:50,geminiModel:'gemini-test',openrouterModel:'model/test'};
+test('Roundtrip das credenciais e modelos sem outras configurações operacionais',()=>{
+ const data:any={aiProvider:'auto',maxPagesPerCompany:50,geminiModel:'gemini-test',openrouterModel:'model/test',deepseekModel:'deepseek-test',groqModel:'groq-test',apifyActorId:'actor/not-exported'};
  for(const field of API_KEY_FIELDS)data[field]='FAKE_TEST_'+field;
- const json=exportApiCredentials(data);assert.deepEqual(importApiCredentials(json),Object.fromEntries([...API_KEY_FIELDS,'geminiModel','openrouterModel'].map(field=>[field,data[field]])));
+ const json=exportApiCredentials(data);assert.deepEqual(importApiCredentials(json),Object.fromEntries([...API_KEY_FIELDS,'geminiModel','openrouterModel','deepseekModel','groqModel'].map(field=>[field,data[field]])));
+ assert.ok(!json.includes('apifyActorId'));
  assert.ok(!json.includes('maxPagesPerCompany'));
 });
 test('Objeto simples e aliases .env aceitos',()=>assert.deepEqual(importApiCredentials('{"OPENAI_API_KEY":"FAKE_TEST_KEY","YDC_API_KEY":"FAKE_YOU_KEY"}'),{openaiApiKey:'FAKE_TEST_KEY',youApiKey:'FAKE_YOU_KEY'}));

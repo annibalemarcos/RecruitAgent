@@ -1,5 +1,5 @@
 import type { CandidateProfile, JobSettings } from './types/index.js';
-import { API_KEY_FIELDS, CONFIG_FORMAT, MODEL_FIELDS, exportConfig, importConfig } from './apiCredentialsJson.js';
+import { API_KEY_FIELDS, CONFIG_FORMAT, MODEL_FIELDS, SERVICE_CONFIG_FIELDS, exportConfig, importConfig } from './apiCredentialsJson.js';
 
 // ---------------------------------------------------------------------------
 // Perfis salvos: "pacotes" com até três blocos da tela de entrada.
@@ -115,7 +115,7 @@ function normalizeConfig(raw: unknown): SavedConfig {
   const imported = importConfig(JSON.stringify(raw)) as Record<string, unknown>;
   const credentials: Record<string, string> = {};
   const settings: Record<string, unknown> = {};
-  const credentialFields = [...API_KEY_FIELDS, ...MODEL_FIELDS] as readonly string[];
+  const credentialFields = [...API_KEY_FIELDS, ...MODEL_FIELDS, ...SERVICE_CONFIG_FIELDS] as readonly string[];
   for (const [field, value] of Object.entries(imported)) {
     if (credentialFields.includes(field)) credentials[field] = value as string;
     else settings[field] = value;

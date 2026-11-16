@@ -55,6 +55,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [resetError, setResetError] = useState('');
   const [transferMessage, setTransferMessage] = useState('');
   const fileInput = React.useRef<HTMLInputElement>(null);
+  const masterBackupInput = React.useRef<HTMLInputElement>(null);
+  const [masterBackupBusy, setMasterBackupBusy] = useState(false);
+  const [masterBackupMessage, setMasterBackupMessage] = useState('');
+  const [masterBackupError, setMasterBackupError] = useState('');
   const [geminiTest, setGeminiTest] = useState<TestResult>({ status: 'idle' });
   const [openaiTest, setOpenaiTest] = useState<TestResult>({ status: 'idle' });
   const [perplexityTest, setPerplexityTest] = useState<TestResult>({ status: 'idle' });
@@ -133,6 +137,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     } catch (error) {
       setTransferMessage(error instanceof Error ? error.message : 'Não foi possível importar o JSON.');
     }
+  };
+
+  const browserStorageSnapshot = () => Object.fromEntries(Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+    .filter((key): key is string => !!key && key.startsWith('recruitagent_'))
+    .map((key) => [key, localStorage.getItem(key) || '']));
+
+  const handleCreateMasterBackup = async () => {
+    if (masterBackupBusy) return;
+    setMasterBackupBusy(true); setMasterBackupMessage(''); setMasterBackupError('');
+    try {
+      const response = await fetch('/api/master-backups/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ browserStorage: browserStorageSnapshot() }) });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Não foi possível criar o backup mestre.');
+      const size = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(result.size / (1024 * 1024));
+      setMasterBackupMessage(`Backup criado: ${result.filename} (${size} MB). Pasta: ${result.directory}`);
+    } catch (error) { setMasterBackupError(error instanceof Error ? error.message : 'Não foi possível criar o backup mestre.'); }
+    finally { setMasterBackupBusy(false); }
+  };
+
+  const handleRestoreMasterBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > 1024 * 1024 * 1024) { setMasterBackupError('O arquivo de backup deve ter no máximo 1 GB.'); return; }
+    if (!window.confirm(`Restaurar “${file.name}”? Isso substituirá os dados e perfis atuais, arquivos de configuração incluídos no backup e dados locais deste navegador. Pesquisas em andamento serão pausadas.`)) return;
+    setMasterBackupBusy(true); setMasterBackupMessage(''); setMasterBackupError('');
+    try {
+      const response = await fetch('/api/master-backups/restore', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Não foi possível restaurar o backup mestre.');
+      for (const key of Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index)).filter((key): key is string => !!key && key.startsWith('recruitagent_'))) localStorage.removeItem(key);
+      for (const [key, value] of Object.entries(result.browserStorage || {})) if (key.startsWith('recruitagent_') && typeof value === 'string') localStorage.setItem(key, value);
+      window.alert(`Backup restaurado (${result.displayedAt || 'data não informada'}). O app será recarregado.`);
+      window.location.reload();
+    } catch (error) { setMasterBackupError(error instanceof Error ? error.message : 'Não foi possível restaurar o backup mestre.'); }
+    finally { setMasterBackupBusy(false); }
   };
 
   const handleExportConfig = () => {
@@ -299,11 +339,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 font-medium"
               >
-                <option value="auto">Automático: Gemini → ChatGPT → Perplexity → OpenRouter</option>
-                <option value="openrouter">Prioridade OpenRouter (Gemini → ChatGPT → Perplexity)</option>
+                <option value="auto">Automático: Gemini → ChatGPT → Perplexity → OpenRouter → DeepSeek → Groq</option>
+                <option value="openrouter">Prioridade OpenRouter (demais modelos como contingência)</option>
                 <option value="gemini">Prioridade Google Gemini (Contingência: ChatGPT → Perplexity)</option>
                 <option value="openai">Prioridade OpenAI ChatGPT (Contingência: Gemini → Perplexity)</option>
                 <option value="perplexity">Prioridade Perplexity AI com Busca Web (Contingência: Gemini → ChatGPT)</option>
+                <option value="deepseek">Prioridade DeepSeek (demais modelos como contingência)</option>
+                <option value="groq">Prioridade Groq (demais modelos como contingência)</option>
               </select>
               <p className="text-[11px] text-slate-400 mt-1">
                 O provedor escolhido tem prioridade. Em falhas, os demais configurados são tentados; OpenRouter integra a mesma fila.
@@ -688,6 +730,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <p className="text-[11px] text-slate-500">A lista será incluída no JSON de configurações e nos perfis salvos que incluem configurações.</p>
           </div>
 
+          <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+            <label htmlFor="email-alias-whitelist" className="block font-bold text-slate-200">Whitelist de aliases para o filtro do Overview</label>
+            <p className="text-[11px] text-slate-400">Informe um alias por linha (o trecho antes do @), por exemplo <code>support</code> ou <code>support@</code>. Com “Somente whitelist” ativo no filtro de contatos, o dropdown de E-mail mostrará apenas esses aliases disponíveis.</p>
+            <textarea id="email-alias-whitelist" rows={4} maxLength={20000} value={(localSettings.emailAliasWhitelist || []).join('\n')} onChange={(event) => setLocalSettings({ ...localSettings, emailAliasWhitelist: [...new Set(event.target.value.split(/[\r\n,;]+/).map((item) => item.trim().toLowerCase().split('@', 1)[0]).filter(Boolean))] })} placeholder={'support\ncareers\nrecruiting'} className="w-full resize-y rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-blue-500 focus:outline-none" />
+            <p className="text-[11px] text-slate-500">Essa lista é salva nas configurações e incluída nos JSONs e perfis salvos com configurações.</p>
+          </div>
+
           {/* Crawler Settings */}
           {/* Max Pages */}
           <div>
@@ -875,6 +924,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </label>
           </div>
         </div>
+
+        <section className="my-5 p-4 rounded-xl border border-blue-500/30 bg-blue-500/5 space-y-3">
+          <h3 className="text-sm font-bold text-blue-200">Backup mestre do aplicativo</h3>
+          <p className="text-xs text-slate-300">Cria um ZIP completo com sessões e dados de <code>data/</code>, perfis salvos, configurações e arquivos pessoais da pasta do projeto, além dos dados locais deste navegador. Os arquivos ficam em <code>master-backups/</code> na pasta do app. O backup pode conter dados pessoais, chaves de API e o arquivo .env; mantenha-o em local seguro.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={masterBackupBusy} onClick={() => void handleCreateMasterBackup()} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50">{masterBackupBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}{masterBackupBusy ? 'Processando backup...' : 'Criar backup mestre'}</button>
+            <input ref={masterBackupInput} type="file" accept=".zip,application/zip" onChange={(event) => void handleRestoreMasterBackup(event)} className="hidden" aria-label="Selecionar backup mestre para restaurar" />
+            <button type="button" disabled={masterBackupBusy} onClick={() => masterBackupInput.current?.click()} className="inline-flex items-center gap-2 rounded-lg border border-blue-500/40 bg-slate-900 px-4 py-2 text-xs font-bold text-blue-200 hover:bg-slate-800 disabled:opacity-50"><Upload className="h-4 w-4" />Restaurar backup mestre</button>
+          </div>
+          {masterBackupMessage && <p role="status" className="break-all text-xs text-emerald-300">{masterBackupMessage}</p>}
+          {masterBackupError && <p role="alert" className="break-all text-xs text-rose-300">{masterBackupError}</p>}
+        </section>
 
         <section className="my-5 p-4 rounded-xl border border-rose-500/40 bg-rose-500/5 space-y-3">
           <h3 className="text-sm font-bold text-rose-300">Zerar dados do aplicativo</h3>

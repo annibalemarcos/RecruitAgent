@@ -3,6 +3,7 @@ import { callOpenRouterJson } from './integrations.js';
 import { getGeminiClient } from './gemini.js';
 import { callOpenAIJson } from './openai.js';
 import { callPerplexityJson } from './perplexity.js';
+import { callCompatibleAiJson, resolveCompatibleAi } from './compatibleAi.js';
 import {
   resolveGeminiCredentials,
   resolveOpenRouterCredentials,
@@ -47,6 +48,7 @@ export function isInvalidApiKeyError(err: unknown): boolean {
     msg.includes('API_KEY_INVALID') ||
     lower.includes('api_key_invalid') ||
     lower.includes('invalid_api_key') ||
+    lower.includes('http 401') ||
     lower.includes('incorrect api key') ||
     lower.includes('api key not valid') ||
     lower.includes('api key is invalid') ||
@@ -90,8 +92,6 @@ function cleanError(err: unknown): string {
   return msg.slice(0, 120);
 }
 
-const spontaneousSubject = `Customer Support & Operations Opportunities — ${profile.name?.trim() || 'Candidate'}`;
-
 const materialFlights = new WeakMap<RecruitmentContact, Promise<GeneratedMaterials>>();
 export function generateMaterialsForContact(...args: Parameters<typeof generateMaterialsUncached>): Promise<GeneratedMaterials> {
   const contact = args[0];
@@ -127,6 +127,7 @@ async function generateMaterialsUncached(
   const perplexityCircuit = isProviderCircuitBlocked('perplexity');
 
   const isSpontaneous = isSpontaneousContact(contact);
+  const spontaneousSubject = `Customer Support & Operations Opportunities — ${profile.name?.trim() || 'Candidate'}`;
 
   const systemInstruction = `
 Você é um estrategista sênior de recrutamento e carreira para candidaturas executivas e de tecnologia.
@@ -221,7 +222,7 @@ Gere a resposta estritamente no seguinte formato JSON contendo as duas chaves "p
 
   // Determine provider candidates based on user preference and circuit state
   interface CandidateProvider {
-    type: 'gemini' | 'openai' | 'perplexity' | 'openrouter';
+    type: 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'deepseek' | 'groq';
     name: string;
     model: string;
     key: string;
@@ -265,9 +266,13 @@ Gere a resposta estritamente no seguinte formato JSON contendo as duas chaves "p
     key: openrouterRes.key, source: openrouterRes.source,
     isBlocked: isProviderCircuitBlocked('openrouter').blocked,
   };
+  const deepseekRes = resolveCompatibleAi('deepseek', settings);
+  const deepseekCandidate: CandidateProvider = { type: 'deepseek', name: 'DeepSeek', model: deepseekRes.model, key: deepseekRes.key, source: deepseekRes.source, isBlocked: isProviderCircuitBlocked('deepseek').blocked, blockReason: isProviderCircuitBlocked('deepseek').reason };
+  const groqRes = resolveCompatibleAi('groq', settings);
+  const groqCandidate: CandidateProvider = { type: 'groq', name: 'Groq', model: groqRes.model, key: groqRes.key, source: groqRes.source, isBlocked: isProviderCircuitBlocked('groq').blocked, blockReason: isProviderCircuitBlocked('groq').reason };
   const providersToTry: CandidateProvider[] = [];
 
-  const allCandidates = [geminiCandidate, openaiCandidate, perplexityCandidate, openrouterCandidate];
+  const allCandidates = [geminiCandidate, openaiCandidate, perplexityCandidate, openrouterCandidate, deepseekCandidate, groqCandidate];
   if (providerMode !== 'auto') {
     const preferred = allCandidates.find(c => c.type === providerMode);
     if (preferred) providersToTry.push(preferred);
@@ -314,6 +319,8 @@ Gere a resposta estritamente no seguinte formato JSON contendo as duas chaves "p
         parsed = await callOpenRouterJson(systemInstruction, prompt, settings);
       } else if (prov.type === 'perplexity') {
         parsed = await callPerplexityJson(systemInstruction, prompt, prov.model, prov.key);
+      } else if (prov.type === 'deepseek' || prov.type === 'groq') {
+        parsed = await callCompatibleAiJson(prov.type, systemInstruction, prompt, prov.model, prov.key, settings?.externalApiTimeoutMs);
       }
 
       if (settings?.generateMaterialsForSpontaneous && isSpontaneous && !hasBilingualMaterials(parsed)) {
@@ -329,6 +336,7 @@ Gere a resposta estritamente no seguinte formato JSON contendo as duas chaves "p
           contact,
           similarityWarning,
           prov.type,
+          spontaneousSubject,
           `${prov.name} (origem: ${prov.source}${isFallback ? ' - contingência' : ''})`
         );
       }
@@ -357,7 +365,7 @@ Gere a resposta estritamente no seguinte formato JSON contendo as duas chaves "p
   // DO NOT return generic fake deterministic text!
   // Throw so contact remains pending (materialsGenerated: false) and crawling can continue!
   const blockMsg =
-    'Geração de materiais suspensa: todas as credenciais de IA configuradas falharam ou estão indisponíveis. Configure uma chave válida (Gemini, OpenAI, Perplexity ou OpenRouter) nas Configurações para processar os materiais pendentes.';
+    'Geração de materiais suspensa: todas as credenciais de IA configuradas falharam ou estão indisponíveis. Configure uma chave válida (Gemini, OpenAI, Perplexity, OpenRouter, DeepSeek ou Groq) nas Configurações para processar os materiais pendentes.';
   onLog?.('warn', `[MATERIAIS PENDENTES] ${blockMsg}`);
   throw new Error(blockMsg);
 }
@@ -366,7 +374,8 @@ function buildDualLanguageMaterial(
   parsed: any,
   contact: RecruitmentContact,
   similarityWarning: string | undefined,
-  generatedBy: 'gemini' | 'openai' | 'perplexity' | 'openrouter',
+  generatedBy: 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'deepseek' | 'groq',
+  spontaneousSubject: string,
   keyUsed?: string
 ): GeneratedMaterials {
   const ptParsed = parsed.pt || (parsed.coldEmail ? parsed : {});

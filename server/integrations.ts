@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
 import type { JobSettings } from '../src/types/index.js';
 
-export const INTEGRATIONS = ['brave', 'firecrawl', 'you', 'exa', 'openrouter'] as const;
+export const INTEGRATIONS = ['brave', 'firecrawl', 'you', 'exa', 'openrouter', 'tavily'] as const;
 export type IntegrationProvider = typeof INTEGRATIONS[number];
-export type SearchProvider = 'brave' | 'you' | 'exa';
+export type SearchProvider = 'brave' | 'you' | 'exa' | 'tavily';
 export type IntegrationLog = (level: 'info' | 'warn' | 'error' | 'success', message: string) => void;
 const envNames: Record<IntegrationProvider, string> = {
   brave: 'BRAVE_SEARCH_API_KEY', firecrawl: 'FIRECRAWL_API_KEY', you: 'YOU_API_KEY',
-  exa: 'EXA_API_KEY', openrouter: 'OPENROUTER_API_KEY',
+  exa: 'EXA_API_KEY', openrouter: 'OPENROUTER_API_KEY', tavily: 'TAVILY_API_KEY',
 };
-const fields = { brave: 'braveApiKey', firecrawl: 'firecrawlApiKey', you: 'youApiKey', exa: 'exaApiKey', openrouter: 'openrouterApiKey' } as const;
+const fields = { brave: 'braveApiKey', firecrawl: 'firecrawlApiKey', you: 'youApiKey', exa: 'exaApiKey', openrouter: 'openrouterApiKey', tavily: 'tavilyApiKey' } as const;
 export function resolveIntegration(provider: IntegrationProvider, settings?: Partial<JobSettings>) {
   const valid = (value: unknown): value is string => typeof value === 'string' && !!value.trim()
     && !/^(SUA_CHAVE|YOUR_|INSERT_|\[CREDENCIAL)/i.test(value.trim());
@@ -88,7 +88,7 @@ export async function integrationRequest(provider: IntegrationProvider, settings
 }
 export function searchOrder(settings?: Partial<JobSettings>): SearchProvider[] {
   if (settings?.webSearchEnabled === false) return [];
-  const order: SearchProvider[] = ['brave', 'you', 'exa'];
+  const order: SearchProvider[] = ['brave', 'you', 'exa', 'tavily'];
   const preferred = settings?.searchProvider || process.env.WEB_SEARCH_PROVIDER;
   if (order.includes(preferred as SearchProvider)) order.sort((a, b) => a === preferred ? -1 : b === preferred ? 1 : 0);
   return order.filter(p => resolveIntegration(p, settings).isConfigured);
@@ -101,8 +101,10 @@ export async function searchWithProvider(provider: SearchProvider, query: string
     `https://api.search.brave.com/res/v1/web/search?${new URLSearchParams({ q: query, count: String(count), country: 'BR', search_lang: 'en' })}`, {}, context, signal, test);
   else if (provider === 'you') data = await integrationRequest(provider, settings, 'https://ydc-index.io/v1/search',
     { method: 'POST', body: JSON.stringify({ query, count }) }, context, signal, test);
-  else data = await integrationRequest(provider, settings, 'https://api.exa.ai/search',
+  else if (provider === 'exa') data = await integrationRequest(provider, settings, 'https://api.exa.ai/search',
     { method: 'POST', body: JSON.stringify({ query, type: 'auto', numResults: count }) }, context, signal, test);
+  else data = await integrationRequest(provider, settings, 'https://api.tavily.com/search', { method: 'POST',
+    body: JSON.stringify({ query, max_results: count, search_depth: 'basic', include_answer: false }) }, context, signal, test);
   const rows = provider === 'brave' ? data?.web?.results : provider === 'you' ? data?.results?.web : data?.results;
   if (!Array.isArray(rows)) throw new IntegrationError(provider, 'formato de resultados inesperado');
   return [...new Set<string>(rows.map((r: any) => r?.url).filter((u: any) => {

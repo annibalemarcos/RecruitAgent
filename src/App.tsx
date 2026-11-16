@@ -11,6 +11,9 @@ import { ContactsTable } from './components/ContactsTable.tsx';
 import { TrackingDashboard } from './components/TrackingDashboard.tsx';
 import { MaterialModal } from './components/MaterialModal.tsx';
 import { ExportPanel } from './components/ExportPanel.tsx';
+import { WelcomeDashboard } from './components/WelcomeDashboard.tsx';
+import { OverviewContactFilters } from './components/OverviewContactFilters.tsx';
+import { EmailMaterialsPage } from './components/EmailMaterialsPage.tsx';
 import { SAMPLE_PROFILE, SAMPLE_COMPANIES_CSV } from './utils/sampleData.ts';
 import { initGlobalMiddleClick } from './utils/openLink.ts';
 import {
@@ -22,7 +25,8 @@ import {
   GeneratedMaterials,
 } from './types/index.ts';
 import { resolveDefaultViewLanguage } from './utils/viewLanguage.ts';
-import { Play, ArrowRight, ShieldCheck, Sparkles, AlertCircle, Loader2, RotateCcw } from 'lucide-react';
+import { getManualOutreachEntries, manualOutreachUpdatedEvent, type ManualOutreachEntry } from './utils/manualOutreach.ts';
+import { Play, ArrowRight, ShieldCheck, Sparkles, AlertCircle, Loader2, RotateCcw, MailSearch, Copy, Check, ChevronDown } from 'lucide-react';
 
 const DEFAULT_SETTINGS: JobSettings = {
   maxConcurrentSections: 1,
@@ -65,11 +69,12 @@ const getInitialStep = (): StepId => {
   try {
     const params = new URLSearchParams(window.location.search);
     const step = params.get('step') as StepId;
-    if (step && ['input', 'execution', 'results', 'tracking', 'export', 'overview'].includes(step)) {
-      return step;
+    if (step === '0') return 'home';
+    if (step && ['home', 'input', 'execution', 'results', 'tracking', 'export', 'overview', 'email-materials'].includes(step)) {
+      return step as StepId;
     }
   } catch {}
-  return 'input';
+  return 'home';
 };
 
 export default function App() {
@@ -80,7 +85,7 @@ export default function App() {
       const next = typeof step === 'function' ? step(prev) : step;
       try {
         const url = new URL(window.location.href);
-        url.searchParams.set('step', next);
+        url.searchParams.set('step', next === 'home' ? '0' : next);
         window.history.replaceState({}, '', url.toString());
       } catch {}
       return next;
@@ -93,8 +98,9 @@ export default function App() {
       try {
         const params = new URLSearchParams(window.location.search);
         const step = params.get('step') as StepId;
-        if (step && ['input', 'execution', 'results', 'tracking', 'export', 'overview'].includes(step)) {
-          setCurrentStepState(step);
+        if (step === '0') setCurrentStepState('home');
+        else if (step && ['home', 'input', 'execution', 'results', 'tracking', 'export', 'overview', 'email-materials'].includes(step)) {
+          setCurrentStepState(step as StepId);
         }
       } catch {}
     };
@@ -104,6 +110,7 @@ export default function App() {
 
   const [session, setSession] = useState<SessionState | null>(null);
   const [overviewSessions, setOverviewSessions] = useState<SessionState[]>([]);
+  const [manualOutreachEntries, setManualOutreachEntries] = useState<ManualOutreachEntry[]>(() => getManualOutreachEntries());
   const [overviewSectionId, setOverviewSectionId] = useState('all');
   const [overviewTrackedCount, setOverviewTrackedCount] = useState(0);
   const [overviewSelectedContactIds, setOverviewSelectedContactIds] = useState<Set<string>>(new Set());
@@ -112,6 +119,14 @@ export default function App() {
   const [overviewHideDuplicates, setOverviewHideDuplicates] = useState(false);
   const [overviewHideHandled, setOverviewHideHandled] = useState(false);
   const [overviewSearch, setOverviewSearch] = useState('');
+  const [overviewEmailFilter, setOverviewEmailFilter] = useState('all');
+  const [overviewUseEmailWhitelist, setOverviewUseEmailWhitelist] = useState(false);
+  const [overviewContactStatusFilter, setOverviewContactStatusFilter] = useState('all');
+  const [overviewCompanyStatusFilter, setOverviewCompanyStatusFilter] = useState('all');
+  const [overviewClassificationFilter, setOverviewClassificationFilter] = useState('all');
+  const [overviewOnlyWithVacancies, setOverviewOnlyWithVacancies] = useState(false);
+  const [overviewCopiedEmail, setOverviewCopiedEmail] = useState<string | null>(null);
+  const [overviewCopyMessage, setOverviewCopyMessage] = useState('');
   const [rawCompanies, setRawCompanies] = useState<ParsedCompanyInput[]>([]);
   const [profile, setProfile] = useState<CandidateProfile>(EMPTY_PROFILE);
   const [sectionName, setSectionName] = useState(() => localStorage.getItem('recruitagent_section_name') || `Seção ${new Date().toLocaleString('pt-BR')}`);
@@ -193,6 +208,16 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
+    const refreshManualEntries = () => setManualOutreachEntries(getManualOutreachEntries());
+    window.addEventListener(manualOutreachUpdatedEvent(), refreshManualEntries);
+    window.addEventListener('storage', refreshManualEntries);
+    return () => {
+      window.removeEventListener(manualOutreachUpdatedEvent(), refreshManualEntries);
+      window.removeEventListener('storage', refreshManualEntries);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 5000);
     return () => clearTimeout(timer);
@@ -215,7 +240,7 @@ export default function App() {
   }, [refreshTrackedCount, session?.sessionId]);
 
   useEffect(() => {
-    if (currentStep !== 'overview') return;
+    if (currentStep !== 'overview' && currentStep !== 'home') return;
     let cancelled = false;
     const loadOverview = async () => {
       try {
@@ -282,9 +307,6 @@ export default function App() {
             setSectionName(s.name || `Seção ${s.sessionId}`);
             localStorage.setItem('recruitagent_section_name', s.name || '');
             setSettings({ ...(s.settings || DEFAULT_SETTINGS), navigationLayout: localStorage.getItem('recruitagent_navigation_layout') === 'sidebar' ? 'sidebar' : (s.settings?.navigationLayout || 'top') });
-            const urlStep = new URLSearchParams(window.location.search).get('step');
-            if (!urlStep && (s.status === 'running' || s.status === 'paused')) setCurrentStep('execution');
-            else if (!urlStep && s.status === 'completed') setCurrentStep('results');
             setIsRecoveringSession(false);
             return;
           }
@@ -305,14 +327,6 @@ export default function App() {
           setSettings({ ...(s.settings || DEFAULT_SETTINGS), navigationLayout: localStorage.getItem('recruitagent_navigation_layout') === 'sidebar' ? 'sidebar' : (s.settings?.navigationLayout || 'top') });
           localStorage.setItem('recruitagent_session_id', s.sessionId);
 
-          const urlStep = new URLSearchParams(window.location.search).get('step');
-          if (!urlStep) {
-            if (s.status === 'running' || s.status === 'paused') {
-              setCurrentStep('execution');
-            } else if (s.status === 'completed') {
-              setCurrentStep('results');
-            }
-          }
           setIsRecoveringSession(false);
           return;
         }
@@ -748,15 +762,42 @@ export default function App() {
         materials: overviewSelectedSession?.companies.reduce((sum, company) => sum + company.contacts.filter((contact) => contact.materialsGenerated).length, 0) || 0,
         tracked: trackedCount,
       };
-  const overviewAllContacts = overviewSessions.flatMap((item) => item.companies.flatMap((company) => company.contacts.map((contact) => ({ session: item, company, contact }))));
+  const overviewScopedSessions = overviewSectionId === 'all' ? overviewSessions : overviewSelectedSession ? [overviewSelectedSession] : [];
+  const overviewScopedContacts = overviewScopedSessions.flatMap((item) => item.companies.flatMap((company) => company.contacts.map((contact) => ({ session: item, company, contact }))));
+  const overviewEmailOptions = (() => {
+    const counts = new Map<string, number>();
+    for (const { contact } of overviewScopedContacts) {
+      const email = contact.email?.trim().toLocaleLowerCase('pt-BR');
+      if (email) {
+        const localPart = email.split('@', 1)[0];
+        if (localPart) counts.set(localPart, (counts.get(localPart) || 0) + 1);
+      }
+    }
+    return [...counts.entries()].sort(([emailA, countA], [emailB, countB]) => countB - countA || emailA.localeCompare(emailB, 'pt-BR'));
+  })();
+  const overviewAllowedEmailAliases = new Set([
+    ...(globalSettings.emailAliasWhitelist || []),
+    ...overviewScopedSessions.flatMap((item) => item.settings?.emailAliasWhitelist || []),
+  ].map((item) => item.trim().toLocaleLowerCase('pt-BR').split('@', 1)[0]).filter(Boolean));
+  const overviewSelectableEmailOptions = overviewUseEmailWhitelist
+    ? overviewEmailOptions.filter(([alias]) => overviewAllowedEmailAliases.has(alias))
+    : overviewEmailOptions;
+  const overviewCompanyStatuses = [...new Set(overviewScopedContacts.map(({ company }) => company.status))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const overviewEffectiveEmailFilter = overviewEmailFilter !== 'all' && (!overviewEmailOptions.some(([alias]) => alias === overviewEmailFilter) || (overviewUseEmailWhitelist && !overviewAllowedEmailAliases.has(overviewEmailFilter))) ? 'all' : overviewEmailFilter;
   const overviewVisibleContacts = (() => {
     const seenEmails = new Set<string>();
     const query = overviewSearch.trim().toLocaleLowerCase('pt-BR');
-    return overviewAllContacts.filter(({ session: item, company, contact }) => {
+    return overviewScopedContacts.filter(({ session: item, company, contact }) => {
       const email = contact.email?.trim().toLocaleLowerCase('pt-BR') || '';
+      const outreachStatus = contact.outreachStatus || 'pending';
       if (overviewHideHandled && (contact.outreachStatus || 'pending') !== 'pending') return false;
       if (overviewOnlyWithEmail && !email) return false;
-      if (query && ![contact.name, contact.email, company.name, item.name].some((value) => value?.toLocaleLowerCase('pt-BR').includes(query))) return false;
+      if (overviewEffectiveEmailFilter !== 'all' && email.split('@', 1)[0] !== overviewEffectiveEmailFilter) return false;
+      if (overviewContactStatusFilter !== 'all' && outreachStatus !== overviewContactStatusFilter) return false;
+      if (overviewCompanyStatusFilter !== 'all' && company.status !== overviewCompanyStatusFilter) return false;
+      if (overviewClassificationFilter !== 'all' && contact.classification !== overviewClassificationFilter) return false;
+      if (overviewOnlyWithVacancies && company.vacanciesFound.length === 0 && !contact.associatedJob) return false;
+      if (query && ![contact.name, contact.email, company.name, company.normalizedUrl, item.name, contact.associatedJob?.title].some((value) => value?.toLocaleLowerCase('pt-BR').includes(query))) return false;
       if (overviewHideDuplicates && email) {
         if (seenEmails.has(email)) return false;
         seenEmails.add(email);
@@ -765,13 +806,49 @@ export default function App() {
     });
   })();
   const overviewSelectedContacts = overviewVisibleContacts.filter(({ contact }) => overviewSelectedContactIds.has(contact.id));
+  const overviewSelectedEmails = [...new Set(overviewSelectedContacts.map(({ contact }) => contact.email?.trim()).filter((email): email is string => !!email))];
   const overviewVisibleIds = new Set(overviewVisibleContacts.map(({ contact }) => contact.id));
-  const overviewCompanyGroups = overviewSessions.flatMap((item) => item.companies.map((company) => ({ session: item, company, contacts: overviewVisibleContacts.filter((entry) => entry.session.sessionId === item.sessionId && entry.company.id === company.id).map((entry) => entry.contact) })).filter((group) => group.contacts.length > 0));
+  const overviewCompanyGroups = overviewScopedSessions.flatMap((item) => item.companies.map((company) => ({ session: item, company, contacts: overviewVisibleContacts.filter((entry) => entry.session.sessionId === item.sessionId && entry.company.id === company.id).map((entry) => entry.contact) })).filter((group) => group.contacts.length > 0));
+  const overviewFiltersActive = !!overviewSearch.trim() || overviewEmailFilter !== 'all' || overviewContactStatusFilter !== 'all' || overviewCompanyStatusFilter !== 'all' || overviewClassificationFilter !== 'all' || overviewOnlyWithEmail || overviewOnlyWithVacancies || overviewUseEmailWhitelist || overviewHideDuplicates || overviewHideHandled;
+  const overviewFilteredCompanies = new Set(overviewVisibleContacts.map(({ session: item, company }) => `${item.sessionId}:${company.id}`));
+  const overviewFilteredMetrics = {
+    companies: overviewFiltersActive ? overviewFilteredCompanies.size : overviewScopedSessions.reduce((sum, item) => sum + item.companies.length, 0),
+    contacts: overviewFiltersActive ? overviewVisibleContacts.length : overviewScopedContacts.length,
+    materials: (overviewFiltersActive ? overviewVisibleContacts : overviewScopedContacts).filter(({ contact }) => contact.materialsGenerated).length,
+    tracked: (overviewFiltersActive ? overviewVisibleContacts : overviewScopedContacts).filter(({ contact }) => (contact.outreachStatus || 'pending') !== 'pending').length,
+  };
+  const overviewVisibleSections = overviewFiltersActive
+    ? overviewScopedSessions.filter((item) => item.companies.some((company) => overviewVisibleContacts.some((entry) => entry.session.sessionId === item.sessionId && entry.company.id === company.id)))
+    : overviewScopedSessions;
+  const overviewMatchedContactsByCompany = new Map<string, RecruitmentContact[]>();
+  for (const entry of overviewVisibleContacts) {
+    const matches = overviewMatchedContactsByCompany.get(entry.company.id) || [];
+    matches.push(entry.contact);
+    overviewMatchedContactsByCompany.set(entry.company.id, matches);
+  }
+  const overviewFilteredSession = overviewSelectedSession ? {
+    ...overviewSelectedSession,
+    companies: overviewSelectedSession.companies
+      .filter((company) => !overviewFiltersActive || overviewMatchedContactsByCompany.has(company.id))
+      .map((company) => ({ ...company, contacts: overviewMatchedContactsByCompany.get(company.id) || [] })),
+  } : null;
   const toggleOverviewContact = (id: string) => setOverviewSelectedContactIds((current) => {
     const next = new Set(current);
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+  const copyOverviewEmails = async (emails: string[], copiedKey: string) => {
+    if (!emails.length) return;
+    try {
+      await navigator.clipboard.writeText(emails.join('\n'));
+      setOverviewCopiedEmail(copiedKey);
+      setOverviewCopyMessage(`${emails.length} email(s) copiado(s).`);
+      window.setTimeout(() => setOverviewCopiedEmail((current) => current === copiedKey ? null : current), 1800);
+      window.setTimeout(() => setOverviewCopyMessage(''), 2500);
+    } catch {
+      setOverviewCopyMessage('Não foi possível copiar. Verifique a permissão da área de transferência.');
+    }
+  };
   const handleOverviewBulkContacted = async () => {
     if (!overviewSelectedContacts.length) return;
     setOverviewBulkBusy(true);
@@ -889,6 +966,12 @@ export default function App() {
         )}
 
         {/* STEP 1: INPUT & PROFILE */}
+        {currentStep === 'home' && (
+          <WelcomeDashboard sessions={overviewSessions} trackedCount={overviewTrackedCount} manualEntries={manualOutreachEntries} onNavigate={setCurrentStep} />
+        )}
+
+        {currentStep === 'email-materials' && <EmailMaterialsPage />}
+
         {currentStep === 'input' && (
           <div className="space-y-6">
             <div className="flex items-center gap-2 text-sm text-slate-300">Seção: {editingSectionName ? <input autoFocus value={sectionName} onChange={e => setSectionName(e.target.value)} onBlur={() => { setEditingSectionName(false); if (session) void persistSectionName(session.sessionId, sectionName); else localStorage.setItem('recruitagent_section_name', sectionName); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="bg-slate-800 border border-slate-600 rounded px-2 py-1" /> : <strong>{sectionName}</strong>} <button type="button" onClick={() => setEditingSectionName(true)} className="text-blue-400 hover:text-blue-300" title="Editar nome">✎</button><span className="text-[11px] text-slate-500">Salvamento automático</span></div>
@@ -1078,24 +1161,47 @@ export default function App() {
               </select>
             </div>
             <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[['Empresas', overviewMetrics.companies], ['Contatos', overviewMetrics.contacts], ['Materiais gerados', overviewMetrics.materials], ['Acompanhamentos', overviewMetrics.tracked]].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-5"><div className="text-xs text-slate-400">{label}</div><div className="mt-2 text-2xl font-bold text-white">{value}</div></div>)}
+              {[['Empresas', overviewFilteredMetrics.companies], ['Contatos', overviewFilteredMetrics.contacts], ['Materiais gerados', overviewFilteredMetrics.materials], ['Acompanhamentos', overviewFilteredMetrics.tracked], ['Entradas manuais', manualOutreachEntries.length]].map(([label, value]) => <div key={label} className="rounded-xl border border-slate-800 bg-slate-900 p-5"><div className="text-xs text-slate-400">{label}</div><div className="mt-2 text-2xl font-bold text-white">{value}</div></div>)}
             </section>
+            <details className="group rounded-xl border border-slate-800 bg-slate-900">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">
+                <div><h2 className="text-sm font-semibold text-white">Entradas manuais do gerador</h2><p className="mt-1 text-[11px] text-slate-500">Registros criados manualmente, separados dos contatos encontrados nas pesquisas.</p></div>
+                <div className="flex shrink-0 items-center gap-3"><span className="rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-xs text-slate-300">{manualOutreachEntries.length}</span><ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" /></div>
+              </summary>
+              <div className="border-t border-slate-800 p-5 pt-4">
+                <div className="mb-3 flex justify-end"><button type="button" onClick={() => setCurrentStep('email-materials')} className="text-xs font-semibold text-blue-300 hover:text-blue-200">Abrir gerador</button></div>
+                {manualOutreachEntries.length ? <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{[...manualOutreachEntries].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((entry) => <div key={entry.email} className="rounded-lg border border-slate-800 bg-slate-950/60 p-3"><div className="flex items-center justify-between gap-2"><strong className="truncate text-xs text-slate-200">{entry.company}</strong><div className="flex shrink-0 items-center gap-1.5"><span className={`rounded-full px-2 py-1 text-[10px] ${entry.status === 'contacted' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-800 text-slate-300'}`}>{entry.status === 'contacted' ? 'Contactado' : 'Pendente'}</span><span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] text-slate-300">{entry.language === 'pt' ? 'PT-BR' : 'English'}</span></div></div><p className="mt-1 truncate text-[11px] text-slate-400">{entry.email}</p><p className="mt-1 text-[10px] text-slate-500">Gerado em {new Date(entry.createdAt).toLocaleString('pt-BR')}</p></div>)}</div> : <p className="rounded-lg border border-dashed border-slate-700 p-5 text-center text-xs text-slate-500">Nenhuma entrada manual gerada ainda.</p>}
+              </div>
+            </details>
+            <OverviewContactFilters
+              scopeDescription={overviewSectionId === 'all' ? 'Refine os resultados de todas as seções.' : `Refine os resultados da seção ${overviewSelectedSession?.name || 'selecionada'}.`}
+              search={overviewSearch} emailFilter={overviewEffectiveEmailFilter} useEmailWhitelist={overviewUseEmailWhitelist}
+              emailOptions={overviewSelectableEmailOptions.map(([alias, count]) => ({ alias, count }))} allowedAliasCount={overviewAllowedEmailAliases.size}
+              contactStatus={overviewContactStatusFilter} companyStatus={overviewCompanyStatusFilter} classification={overviewClassificationFilter}
+              companyStatuses={overviewCompanyStatuses} onlyWithEmail={overviewOnlyWithEmail} onlyWithVacancies={overviewOnlyWithVacancies}
+              hideDuplicates={overviewHideDuplicates} hideHandled={overviewHideHandled} visibleCount={overviewVisibleContacts.length} totalCount={overviewScopedContacts.length}
+              onSearchChange={setOverviewSearch} onEmailChange={setOverviewEmailFilter}
+              onWhitelistChange={(enabled) => { setOverviewUseEmailWhitelist(enabled); if (enabled && overviewEmailFilter !== 'all' && !overviewAllowedEmailAliases.has(overviewEmailFilter)) setOverviewEmailFilter('all'); }}
+              onContactStatusChange={setOverviewContactStatusFilter} onCompanyStatusChange={setOverviewCompanyStatusFilter}
+              onClassificationChange={setOverviewClassificationFilter} onOnlyWithEmailChange={setOverviewOnlyWithEmail}
+              onOnlyWithVacanciesChange={setOverviewOnlyWithVacancies} onHideDuplicatesChange={setOverviewHideDuplicates}
+              onHideHandledChange={setOverviewHideHandled}
+              onClear={() => { setOverviewSearch(''); setOverviewEmailFilter('all'); setOverviewUseEmailWhitelist(false); setOverviewContactStatusFilter('all'); setOverviewCompanyStatusFilter('all'); setOverviewClassificationFilter('all'); setOverviewOnlyWithEmail(false); setOverviewOnlyWithVacancies(false); setOverviewHideDuplicates(false); setOverviewHideHandled(false); }}
+            />
             {overviewSectionId === 'all' ? <>
-              <section className="rounded-xl border border-slate-800 bg-slate-900 p-5"><h2 className="text-base font-semibold text-white mb-3">Seções incluídas</h2><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{overviewSessions.map((item) => { const done = item.status === 'completed' ? 100 : item.companies.length ? Math.round(item.companies.filter((company) => company.status !== 'Pendente').length / item.companies.length * 100) : 0; return <button key={item.sessionId} type="button" onClick={() => void handleOverviewSectionChange(item.sessionId)} className="text-left rounded-lg border border-slate-700 bg-slate-950/60 p-4 hover:border-blue-500/60"><div className="flex justify-between gap-3"><strong className="text-sm text-slate-100 truncate">{item.name || 'Seção sem nome'}</strong><span className="text-xs text-slate-400">{done}%</span></div><div className="mt-2 text-xs text-slate-400">{item.companies.length} empresas · {item.companies.reduce((sum, company) => sum + company.contacts.length, 0)} contatos</div></button>; })}{!overviewSessions.length && <p className="text-xs text-slate-400">Ainda não há seções salvas.</p>}</div></section>
+              <details className="group rounded-xl border border-slate-800 bg-slate-900">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden"><div><h2 className="text-base font-semibold text-white">Seções incluídas</h2><p className="mt-1 text-[11px] text-slate-500">Abra uma seção para ver o progresso e os totais.</p></div><div className="flex shrink-0 items-center gap-3"><span className="rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-xs text-slate-300">{overviewVisibleSections.length}</span><ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" /></div></summary>
+                <div className="grid gap-3 border-t border-slate-800 p-5 pt-4 sm:grid-cols-2 lg:grid-cols-3">{overviewVisibleSections.map((item) => { const visibleGroups = overviewCompanyGroups.filter((group) => group.session.sessionId === item.sessionId); const visibleCompanies = overviewFiltersActive ? visibleGroups.length : item.companies.length; const visibleContacts = overviewFiltersActive ? visibleGroups.reduce((sum, group) => sum + group.contacts.length, 0) : item.companies.reduce((sum, company) => sum + company.contacts.length, 0); const done = item.status === 'completed' ? 100 : visibleCompanies ? Math.round(item.companies.filter((company) => company.status !== 'Pendente' && (!overviewFiltersActive || visibleGroups.some((group) => group.company.id === company.id))).length / visibleCompanies * 100) : 0; return <button key={item.sessionId} type="button" onClick={() => void handleOverviewSectionChange(item.sessionId)} className="text-left rounded-lg border border-slate-700 bg-slate-950/60 p-4 hover:border-blue-500/60"><div className="flex justify-between gap-3"><strong className="text-sm text-slate-100 truncate">{item.name || 'Seção sem nome'}</strong><span className="text-xs text-slate-400">{done}%</span></div><div className="mt-2 text-xs text-slate-400">{visibleCompanies} empresas · {visibleContacts} contatos</div></button>; })}{!overviewVisibleSections.length && <p className="text-xs text-slate-400">Nenhuma seção corresponde aos filtros.</p>}</div>
+              </details>
               <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-slate-950/70 p-3 rounded-xl border border-slate-800 mb-3">
-                  <input type="search" value={overviewSearch} onChange={(event) => setOverviewSearch(event.target.value)} placeholder="Buscar email, contato, empresa ou seção" className="w-full sm:w-72 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-200" />
-                  <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={overviewOnlyWithEmail} onChange={(event) => setOverviewOnlyWithEmail(event.target.checked)} />Só emails</label>
-                  <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={overviewHideDuplicates} onChange={(event) => setOverviewHideDuplicates(event.target.checked)} />Remover duplicatas</label>
-                  <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={overviewHideHandled} onChange={(event) => setOverviewHideHandled(event.target.checked)} />Ocultar enviados, removidos e outros já tratados</label>
-                  <span className="text-[11px] text-slate-400 sm:ml-auto">{overviewVisibleContacts.length} de {overviewAllContacts.length} contato(s)</span>
-                </div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950/70 p-3 rounded-xl border border-slate-800 mb-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={() => setOverviewSelectedContactIds(overviewVisibleContacts.every(({ contact }) => overviewSelectedContactIds.has(contact.id)) ? new Set([...overviewSelectedContactIds].filter((id) => !overviewVisibleIds.has(id))) : new Set([...overviewSelectedContactIds, ...overviewVisibleContacts.map(({ contact }) => contact.id)]))} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-slate-200 border border-slate-700">{overviewVisibleContacts.length > 0 && overviewVisibleContacts.every(({ contact }) => overviewSelectedContactIds.has(contact.id)) ? '☑ Desmarcar Todos' : `☐ Selecionar Todos (${overviewVisibleContacts.length})`}</button>
                     {overviewSelectedContacts.length > 0 ? <span className="px-2.5 py-1 rounded-full text-xs font-bold text-rose-300 bg-rose-500/15 border border-rose-500/30">● {overviewSelectedContacts.length} selecionado(s)</span> : <span className="text-[11px] text-slate-400">Selecione contatos ou empresas para ações em lote.</span>}
+                  {overviewCopyMessage && <span role="status" className="text-xs text-emerald-300">{overviewCopyMessage}</span>}
                   </div>
                   {overviewSelectedContacts.length > 0 && <div className="flex flex-wrap gap-2">
+                    <button type="button" disabled={!overviewSelectedEmails.length} onClick={() => void copyOverviewEmails(overviewSelectedEmails, 'bulk')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-cyan-200 bg-cyan-950/70 border border-cyan-700/70 disabled:opacity-50">{overviewCopiedEmail === 'bulk' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}{overviewCopiedEmail === 'bulk' ? 'Copiado' : `Copiar emails (${overviewSelectedEmails.length})`}</button>
                     <button type="button" disabled={overviewBulkBusy} onClick={() => void handleOverviewBulkDiscard()} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-rose-600 disabled:opacity-50">Descartar ({overviewSelectedContacts.length})</button>
                     <button type="button" disabled={overviewBulkBusy} onClick={() => void handleOverviewBulkContacted()} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 disabled:opacity-50">Contactados ({overviewSelectedContacts.length})</button>
                     <button type="button" onClick={handleOverviewBulkOpenEmails} className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-200 bg-red-950/70 border border-red-700/70">Gmail EN ({overviewSelectedContacts.length})</button>
@@ -1106,13 +1212,13 @@ export default function App() {
                     const selected = contacts.length > 0 && contacts.every((contact) => overviewSelectedContactIds.has(contact.id));
                     return <div key={`${item.sessionId}:${company.id}`} className={`rounded-xl border ${selected ? 'border-emerald-500/70 bg-emerald-950/10' : 'border-slate-800 bg-slate-950/50'} p-3`}>
                       <div className="flex items-center gap-2 text-xs"><input type="checkbox" aria-label={`Selecionar todos de ${company.name}`} checked={selected} onChange={(event) => setOverviewSelectedContactIds((current) => { const next = new Set(current); contacts.forEach((contact) => event.target.checked ? next.add(contact.id) : next.delete(contact.id)); return next; })} /><strong className="text-slate-100">{company.name}</strong><span className="text-slate-500">· {item.name || 'Seção sem nome'} · {contacts.length} contato(s)</span></div>
-                      {contacts.length > 0 && <div className="mt-2 ml-6 space-y-1">{contacts.map((contact) => <label key={contact.id} className="flex items-center gap-2 text-[11px] text-slate-300"><input type="checkbox" checked={overviewSelectedContactIds.has(contact.id)} onChange={() => toggleOverviewContact(contact.id)} /><span className="min-w-0 truncate">{contact.email || contact.name || 'Sem email'}</span><span className="text-slate-500">{contact.outreachStatus === 'contacted' ? 'Enviado' : contact.outreachStatus === 'discarded' ? 'Removido' : contact.outreachStatus === 'interview' ? 'Entrevista' : contact.outreachStatus === 'offer' ? 'Oferta' : contact.outreachStatus === 'rejected' ? 'Rejeitado' : 'Pendente'}</span></label>)}</div>}
+                      {contacts.length > 0 && <div className="mt-2 ml-6 space-y-1">{contacts.map((contact) => <div key={contact.id} className="flex min-w-0 items-center gap-2 text-[11px] text-slate-300"><input aria-label={`Selecionar ${contact.email || contact.name || 'contato'}`} type="checkbox" checked={overviewSelectedContactIds.has(contact.id)} onChange={() => toggleOverviewContact(contact.id)} /><span className="min-w-0 truncate">{contact.email || contact.name || 'Sem email'}</span>{contact.email && <button type="button" aria-label={`Copiar ${contact.email}`} title="Copiar email" onClick={() => void copyOverviewEmails([contact.email], contact.id)} className="inline-flex shrink-0 items-center rounded px-1.5 py-1 text-cyan-300 hover:bg-slate-800">{overviewCopiedEmail === contact.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}</button>}<span className="shrink-0 text-slate-500">{contact.outreachStatus === 'contacted' ? 'Enviado' : contact.outreachStatus === 'discarded' ? 'Removido' : contact.outreachStatus === 'interview' ? 'Entrevista' : contact.outreachStatus === 'offer' ? 'Oferta' : contact.outreachStatus === 'rejected' ? 'Rejeitado' : 'Pendente'}</span></div>)}</div>}
                     </div>;
                   })}
-                  {overviewVisibleContacts.length === 0 && <p className="p-4 text-center text-slate-400 text-xs">{overviewAllContacts.length === 0 ? 'Nenhum contato nas seções salvas.' : 'Nenhum contato corresponde aos filtros atuais.'}</p>}
+                  {overviewVisibleContacts.length === 0 && <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 py-7 text-center"><MailSearch className="mb-2 h-7 w-7 text-slate-500" /><p className="text-sm font-medium text-slate-300">{overviewScopedContacts.length === 0 ? 'Nenhum contato nesta seção' : 'Nenhum contato corresponde aos filtros'}</p><p className="mt-1 text-xs text-slate-500">{overviewScopedContacts.length === 0 ? 'Escolha outra seção ou inicie uma pesquisa.' : 'Limpe ou ajuste os filtros para ver mais resultados.'}</p></div>}
                 </div>
               </section>
-            </> : <div className="rounded-xl border border-slate-800 bg-slate-900 p-5"><h2 className="text-base font-semibold text-white mb-3">Contatos e materiais da seção</h2>{overviewSelectedSession ? <ContactsTable session={overviewSelectedSession} onOpenMaterialModal={(cnt, comp) => { setModalContact(cnt); setModalCompany(comp); }} onGenerateContactMaterials={handleGenerateContactMaterials} onGenerateAllPending={handleGenerateAllPending} isGeneratingAllPending={isGeneratingAllPending} onNavigateToTracking={() => setCurrentStep('tracking')} onNavigateToExport={() => setCurrentStep('export')} /> : <p className="text-xs text-slate-400">Carregando seção...</p>}</div>}
+            </> : <div className="rounded-xl border border-slate-800 bg-slate-900 p-5"><h2 className="text-base font-semibold text-white mb-3">Contatos e materiais da seção</h2>{overviewFilteredSession ? <ContactsTable session={overviewFilteredSession} hideFilters visibleContactIds={new Set(overviewVisibleContacts.map(({ contact }) => contact.id))} onOpenMaterialModal={(cnt, comp) => { setModalContact(cnt); setModalCompany(comp); }} onGenerateContactMaterials={handleGenerateContactMaterials} onGenerateAllPending={handleGenerateAllPending} isGeneratingAllPending={isGeneratingAllPending} onNavigateToTracking={() => setCurrentStep('tracking')} onNavigateToExport={() => setCurrentStep('export')} /> : <p className="text-xs text-slate-400">Carregando seção...</p>}</div>}
             <TrackingDashboard session={overviewSectionId === 'all' ? null : overviewSelectedSession} onNavigateToResults={() => setCurrentStep('results')} />
           </div>
         )}

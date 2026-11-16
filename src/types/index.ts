@@ -134,7 +134,7 @@ export interface GeneratedMaterials {
   generatedAt: string;
   isEdited?: boolean;
   similarityWarning?: string;
-  generatedBy?: 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'fallback';
+  generatedBy?: 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'deepseek' | 'groq' | 'fallback';
   keyUsed?: string;
 }
 
@@ -194,6 +194,8 @@ export interface RecruitmentContact {
   applicationRestrictions?: string;
   materialsGenerated: boolean;
   materials?: GeneratedMaterials;
+  emailDeliverability?: 'DELIVERABLE' | 'UNDELIVERABLE' | 'RISKY' | 'UNKNOWN';
+  emailQualityScore?: number;
 
   // Outreach & Follow-up tracking
   outreachStatus?: OutreachStatus;
@@ -225,6 +227,7 @@ export interface JobSettings {
   maxConcurrentSections?: number;
   lowResourceMode?: boolean;
   emailBlacklist?: string[];
+  emailAliasWhitelist?: string[];
   navigationLayout?: 'top' | 'sidebar';
   theme?: 'dark' | 'light';
   maxPagesPerCompany: number;
@@ -236,14 +239,35 @@ export interface JobSettings {
   externalBrowserEndpoint?: string;
 
   // AI Model Configuration
-  aiProvider: 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'auto';
+  aiProvider: 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'deepseek' | 'groq' | 'auto';
+  tavilyApiKey?: string;
+  deepseekApiKey?: string;
+  deepseekModel?: string;
+  groqApiKey?: string;
+  groqModel?: string;
+  abstractApiKey?: string;
+  apifyApiToken?: string;
+  apifyActorId?: string;
+  hunterApiKey?: string;
+  apolloApiKey?: string;
+  peopleDataLabsApiKey?: string;
+  adzunaAppId?: string;
+  adzunaApiKey?: string;
+  googleCloudApiKey?: string;
+  n8nWebhookUrl?: string;
+  n8nApiKey?: string;
+  firebaseProjectId?: string;
+  firebaseApiKey?: string;
+  convexUrl?: string;
+  convexDeployKey?: string;
+  emailValidationEnabled?: boolean;
   braveApiKey?: string;
   firecrawlApiKey?: string;
   youApiKey?: string;
   exaApiKey?: string;
   openrouterApiKey?: string;
   openrouterModel?: string;
-  searchProvider?: 'auto' | 'brave' | 'you' | 'exa';
+  searchProvider?: 'auto' | 'brave' | 'you' | 'exa' | 'tavily';
   webSearchEnabled?: boolean;
   pageRetrievalEnabled?: boolean;
   renderPagesWithoutEmail?: boolean;

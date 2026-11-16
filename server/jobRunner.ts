@@ -10,6 +10,9 @@ import { unblockProviderCircuit, isProviderCircuitBlocked } from './credentials.
 import { enhanceCompanySearchWithAI } from './aiSearchEnhancer.js';
 import { reconcileCompanyVacancies, isVacancyEquivalent } from './vacancyManager.js';
 import { clampInt, runPool, MAX_PARALLEL } from './concurrency.js';
+import { fetchPublicJobBoard } from './jobBoardApis.js';
+import { validateContactDeliverability } from './emailQuality.js';
+import { resolveCompatibleAi } from './compatibleAi.js';
 
 const SESSIONS_DIR = path.resolve(process.cwd(), 'data', 'sessions');
 
@@ -443,6 +446,8 @@ async function runSessionLoop(
         [], session.settings, integrationContext
       );
 
+      const atsVacancies = await fetchPublicJobBoard([crawlResult.careersUrl, crawlResult.applicationPortalUrl], session.settings.externalApiTimeoutMs);
+
       company.visitedPages = crawlResult.visitedPages;
       company.companyAbout = crawlResult.companyAbout;
       company.careersUrl = crawlResult.careersUrl;
@@ -453,7 +458,7 @@ async function runSessionLoop(
         company.id,
         company.name,
         company.vacanciesFound || [],
-        crawlResult.vacanciesFound || []
+        [...(crawlResult.vacanciesFound || []), ...atsVacancies.map((vacancy) => ({ ...vacancy, companyId: company.id, companyName: company.name }))]
       );
       company.vacanciesFound = crawlVacReconciliation.vacancies;
 
@@ -483,6 +488,13 @@ async function runSessionLoop(
         }
       }
       company.contacts = Array.from(mergedContactsMap.values());
+      if (session.settings.emailValidationEnabled && (session.settings.abstractApiKey || process.env.ABSTRACT_API_KEY)) {
+        company.contacts = await Promise.all(company.contacts.map(async (contact) => {
+          const checked = await validateContactDeliverability(contact, session.settings, integrationContext);
+          attestContact(checked);
+          return checked;
+        }));
+      }
 
       // Synchronize associatedJob on contacts if vacancies were modified or new
       for (const contact of company.contacts) {
@@ -512,7 +524,7 @@ async function runSessionLoop(
         logSession(
           session,
           'info',
-          `Acionando Busca Inteligente por IA (busca web e contingência Gemini / ChatGPT / Perplexity / OpenRouter) para localizar canais de recrutamento de ${company.name}...`,
+          `Acionando Busca Inteligente por IA (busca web e contingência Gemini / ChatGPT / Perplexity / OpenRouter / DeepSeek / Groq) para localizar canais de recrutamento de ${company.name}...`,
           company.id
         );
 
@@ -636,13 +648,15 @@ async function runSessionLoop(
           const geminiBlocked = isProviderCircuitBlocked('gemini').blocked;
           const openaiBlocked = isProviderCircuitBlocked('openai').blocked;
           const perplexityBlocked = isProviderCircuitBlocked('perplexity').blocked;
-          const isGenerationBlocked = geminiBlocked && openaiBlocked && perplexityBlocked && isProviderCircuitBlocked('openrouter').blocked;
+          const deepseekUnavailable = !resolveCompatibleAi('deepseek', session.settings).key || isProviderCircuitBlocked('deepseek').blocked;
+          const groqUnavailable = !resolveCompatibleAi('groq', session.settings).key || isProviderCircuitBlocked('groq').blocked;
+          const isGenerationBlocked = geminiBlocked && openaiBlocked && perplexityBlocked && isProviderCircuitBlocked('openrouter').blocked && deepseekUnavailable && groqUnavailable;
 
           if (isGenerationBlocked) {
             logSession(
               session,
               'warn',
-              `[TODAS AS IAS BLOQUEADAS] Geração suspensa: as APIs de IA (Gemini, OpenAI, Perplexity e OpenRouter) estão com credenciais inválidas ou bloqueadas. ${contactsToGenerate.length} contato(s) de ${company.name} foram salvos com materiais pendentes. A coleta continua normalmente.`,
+              `[TODAS AS IAS BLOQUEADAS] Geração suspensa: as APIs de IA (Gemini, OpenAI, Perplexity, OpenRouter, DeepSeek e Groq) estão com credenciais inválidas ou bloqueadas. ${contactsToGenerate.length} contato(s) de ${company.name} foram salvos com materiais pendentes. A coleta continua normalmente.`,
               company.id
             );
           } else {
@@ -653,7 +667,9 @@ async function runSessionLoop(
               const geminiNowBlocked = isProviderCircuitBlocked('gemini').blocked;
               const openaiNowBlocked = isProviderCircuitBlocked('openai').blocked;
               const perplexityNowBlocked = isProviderCircuitBlocked('perplexity').blocked;
-              if (geminiNowBlocked && openaiNowBlocked && perplexityNowBlocked && isProviderCircuitBlocked('openrouter').blocked) {
+              const deepseekNowUnavailable = !resolveCompatibleAi('deepseek', session.settings).key || isProviderCircuitBlocked('deepseek').blocked;
+              const groqNowUnavailable = !resolveCompatibleAi('groq', session.settings).key || isProviderCircuitBlocked('groq').blocked;
+              if (geminiNowBlocked && openaiNowBlocked && perplexityNowBlocked && isProviderCircuitBlocked('openrouter').blocked && deepseekNowUnavailable && groqNowUnavailable) {
                 logSession(
                   session,
                   'warn',

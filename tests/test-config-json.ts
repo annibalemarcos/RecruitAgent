@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {API_KEY_FIELDS, CONFIG_SETTING_FIELDS, exportApiCredentials, exportConfig, importConfig} from '../src/apiCredentialsJson.js';
+import {API_KEY_FIELDS, SERVICE_CONFIG_FIELDS, CONFIG_SETTING_FIELDS, exportApiCredentials, exportConfig, importConfig} from '../src/apiCredentialsJson.js';
 let count=0;
 const test=(name:string,fn:()=>void)=>{fn();console.log('PASS '+name);count++;};
 const full=():any=>{
@@ -10,12 +10,13 @@ const full=():any=>{
   geminiModel:'gemini-test',openaiModel:'openai-test',perplexityModel:'sonar-test',openrouterModel:'model/test',
  };
  for(const field of API_KEY_FIELDS)data[field]='FAKE_TEST_'+field;
+ for(const field of SERVICE_CONFIG_FIELDS)data[field]='FAKE_TEST_'+field;
  return data;
 };
 test('Roundtrip completo: chaves, modelos e todos os ajustes da tela',()=>{
  const data=full();
  const imported:any=importConfig(exportConfig(data));
- for(const field of [...API_KEY_FIELDS,...CONFIG_SETTING_FIELDS,'geminiModel','openaiModel','perplexityModel','openrouterModel'])assert.equal(imported[field],data[field],String(field));
+ for(const field of [...API_KEY_FIELDS,...SERVICE_CONFIG_FIELDS,...CONFIG_SETTING_FIELDS,'geminiModel','openaiModel','perplexityModel','openrouterModel'])assert.equal(imported[field],data[field],String(field));
 });
 test('Exportação não inclui campos que não estão na tela',()=>{
  const json=exportConfig({...full(),externalBrowserEndpoint:'http://x'});

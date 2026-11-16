@@ -193,14 +193,17 @@ interface ProviderCircuitState {
   blockedAt?: string;
 }
 
-const circuitStates: Record<'gemini' | 'openai' | 'perplexity' | 'openrouter', ProviderCircuitState> = {
+type AiCircuitProvider = 'gemini' | 'openai' | 'perplexity' | 'openrouter' | 'deepseek' | 'groq';
+const circuitStates: Record<AiCircuitProvider, ProviderCircuitState> = {
   gemini: { isBlocked: false },
   openai: { isBlocked: false },
   perplexity: { isBlocked: false },
   openrouter: { isBlocked: false },
+  deepseek: { isBlocked: false },
+  groq: { isBlocked: false },
 };
 
-export function isProviderCircuitBlocked(provider: 'gemini' | 'openai' | 'perplexity' | 'openrouter'): {
+export function isProviderCircuitBlocked(provider: AiCircuitProvider): {
   blocked: boolean;
   reason?: string;
 } {
@@ -210,7 +213,7 @@ export function isProviderCircuitBlocked(provider: 'gemini' | 'openai' | 'perple
   };
 }
 
-export function blockProviderCircuit(provider: 'gemini' | 'openai' | 'perplexity' | 'openrouter', reason: string): void {
+export function blockProviderCircuit(provider: AiCircuitProvider, reason: string): void {
   circuitStates[provider] = {
     isBlocked: true,
     blockedReason: reason,
@@ -218,7 +221,7 @@ export function blockProviderCircuit(provider: 'gemini' | 'openai' | 'perplexity
   };
 }
 
-export function unblockProviderCircuit(provider: 'gemini' | 'openai' | 'perplexity' | 'openrouter'): void {
+export function unblockProviderCircuit(provider: AiCircuitProvider): void {
   circuitStates[provider] = {
     isBlocked: false,
     blockedReason: undefined,
@@ -226,7 +229,7 @@ export function unblockProviderCircuit(provider: 'gemini' | 'openai' | 'perplexi
   };
 }
 
-export function getProviderCircuitStates(): Record<'gemini' | 'openai' | 'perplexity' | 'openrouter', ProviderCircuitState> {
+export function getProviderCircuitStates(): Record<AiCircuitProvider, ProviderCircuitState> {
   return { ...circuitStates };
 }
 

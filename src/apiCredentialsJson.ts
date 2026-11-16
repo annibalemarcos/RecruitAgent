@@ -1,16 +1,25 @@
 import type { JobSettings } from './types/index.js';
 
-export const API_KEY_FIELDS = ['geminiApiKey', 'openaiApiKey', 'perplexityApiKey', 'openrouterApiKey', 'braveApiKey', 'firecrawlApiKey', 'youApiKey', 'exaApiKey'] as const;
-export const MODEL_FIELDS = ['geminiModel', 'openaiModel', 'perplexityModel', 'openrouterModel'] as const;
-const FIELDS = [...API_KEY_FIELDS, ...MODEL_FIELDS];
-const ALIASES: Record<string, typeof API_KEY_FIELDS[number]> = {
+export const API_KEY_FIELDS = ['geminiApiKey', 'openaiApiKey', 'perplexityApiKey', 'openrouterApiKey', 'braveApiKey', 'firecrawlApiKey', 'youApiKey', 'exaApiKey', 'tavilyApiKey', 'deepseekApiKey', 'groqApiKey', 'abstractApiKey', 'apifyApiToken', 'hunterApiKey', 'apolloApiKey', 'peopleDataLabsApiKey', 'adzunaApiKey', 'googleCloudApiKey', 'n8nApiKey', 'firebaseApiKey', 'convexDeployKey'] as const;
+export const MODEL_FIELDS = ['geminiModel', 'openaiModel', 'perplexityModel', 'openrouterModel', 'deepseekModel', 'groqModel'] as const;
+export const SERVICE_CONFIG_FIELDS = ['apifyActorId', 'adzunaAppId', 'n8nWebhookUrl', 'firebaseProjectId', 'convexUrl'] as const;
+const FIELDS = [...API_KEY_FIELDS, ...MODEL_FIELDS, ...SERVICE_CONFIG_FIELDS];
+const CREDENTIAL_FIELDS = [...API_KEY_FIELDS, ...MODEL_FIELDS] as const;
+const ALIASES: Record<string, string> = {
   GEMINI_API_KEY:'geminiApiKey', GOOGLE_API_KEY:'geminiApiKey', OPENAI_API_KEY:'openaiApiKey',
   PERPLEXITY_API_KEY:'perplexityApiKey', OPENROUTER_API_KEY:'openrouterApiKey',
   BRAVE_SEARCH_API_KEY:'braveApiKey', FIRECRAWL_API_KEY:'firecrawlApiKey',
   YOU_API_KEY:'youApiKey', YDC_API_KEY:'youApiKey', EXA_API_KEY:'exaApiKey',
+  TAVILY_API_KEY:'tavilyApiKey',
+  DEEPSEEK_API_KEY:'deepseekApiKey', GROQ_API_KEY:'groqApiKey', ABSTRACT_API_KEY:'abstractApiKey',
+  APIFY_API_TOKEN:'apifyApiToken', APIFY_TOKEN:'apifyApiToken', HUNTER_API_KEY:'hunterApiKey',
+  APOLLO_API_KEY:'apolloApiKey', PEOPLE_DATA_LABS_API_KEY:'peopleDataLabsApiKey', PDL_API_KEY:'peopleDataLabsApiKey',
+  ADZUNA_APP_ID:'adzunaAppId', ADZUNA_API_KEY:'adzunaApiKey', GOOGLE_CLOUD_API_KEY:'googleCloudApiKey',
+  N8N_WEBHOOK_URL:'n8nWebhookUrl', N8N_API_KEY:'n8nApiKey', FIREBASE_PROJECT_ID:'firebaseProjectId',
+  FIREBASE_API_KEY:'firebaseApiKey', CONVEX_URL:'convexUrl', CONVEX_DEPLOY_KEY:'convexDeployKey', APIFY_ACTOR_ID:'apifyActorId',
 };
 export function exportApiCredentials(settings: JobSettings): string {
-  const credentials = Object.fromEntries(FIELDS.filter(field => typeof settings[field] === 'string' && settings[field]!.trim()).map(field => [field, settings[field]!.trim()]));
+  const credentials = Object.fromEntries(CREDENTIAL_FIELDS.filter(field => typeof settings[field] === 'string' && settings[field]!.trim()).map(field => [field, settings[field]!.trim()]));
   return JSON.stringify({format:'recruitment-api-credentials', version:1, credentials}, null, 2) + '\n';
 }
 export function importApiCredentials(text: string): Partial<JobSettings> {
@@ -53,12 +62,13 @@ type SettingSpec =
 
 // Faixas iguais às dos controles da tela.
 const SETTING_SPECS: Record<string, SettingSpec> = {
-  aiProvider: { kind: 'enum', values: ['auto', 'gemini', 'openai', 'perplexity', 'openrouter'] },
-  searchProvider: { kind: 'enum', values: ['auto', 'brave', 'you', 'exa'] },
+  aiProvider: { kind: 'enum', values: ['auto', 'gemini', 'openai', 'perplexity', 'openrouter', 'deepseek', 'groq'] },
+  searchProvider: { kind: 'enum', values: ['auto', 'brave', 'you', 'exa', 'tavily'] },
   defaultViewLanguage: { kind: 'enum', values: ['pt', 'en'] },
   navigationLayout: { kind: 'enum', values: ['top', 'sidebar'] },
   theme: { kind: 'enum', values: ['dark', 'light'] },
   webSearchEnabled: { kind: 'boolean' },
+  emailValidationEnabled: { kind: 'boolean' },
   pageRetrievalEnabled: { kind: 'boolean' },
   renderPagesWithoutEmail: { kind: 'boolean' },
   generateDualLanguage: { kind: 'boolean' },
@@ -75,6 +85,7 @@ const SETTING_SPECS: Record<string, SettingSpec> = {
   maxExternalCallsPerCompany: { kind: 'int', min: 0, max: 100 },
   externalApiTimeoutMs: { kind: 'int', min: 1000, max: 60000 },
   emailBlacklist: { kind: 'stringArray', maxItems: 200, maxLength: 100 },
+  emailAliasWhitelist: { kind: 'stringArray', maxItems: 500, maxLength: 100 },
 };
 export const CONFIG_SETTING_FIELDS = Object.keys(SETTING_SPECS) as (keyof JobSettings)[];
 

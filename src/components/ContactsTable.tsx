@@ -42,6 +42,8 @@ interface ContactsTableProps {
   isGeneratingAllPending?: boolean;
   onNavigateToTracking?: () => void;
   onNavigateToExport?: () => void;
+  hideFilters?: boolean;
+  visibleContactIds?: ReadonlySet<string>;
 }
 
 export const ContactsTable: React.FC<ContactsTableProps> = ({
@@ -52,6 +54,8 @@ export const ContactsTable: React.FC<ContactsTableProps> = ({
   isGeneratingAllPending,
   onNavigateToTracking,
   onNavigateToExport,
+  hideFilters = false,
+  visibleContactIds,
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedClassification, setSelectedClassification] = useState<string>('all');
@@ -144,6 +148,7 @@ export const ContactsTable: React.FC<ContactsTableProps> = ({
   // Apply filters
   const filteredItems = useMemo(() => {
     return flattenedItems.filter((item) => {
+      if (item.contact && visibleContactIds && !visibleContactIds.has(item.contact.id)) return false;
       const compName = item.company.name.toLowerCase();
       const site = item.company.normalizedUrl.toLowerCase();
       const email = item.contact?.email.toLowerCase() || '';
@@ -165,7 +170,7 @@ export const ContactsTable: React.FC<ContactsTableProps> = ({
 
       return matchSearch && matchClassification && matchStatus && matchVacancies;
     });
-  }, [flattenedItems, searchTerm, selectedClassification, selectedStatus, filterWithVacancies]);
+  }, [flattenedItems, searchTerm, selectedClassification, selectedStatus, filterWithVacancies, visibleContactIds]);
 
   const handleGenerateClick = async (contactId: string) => {
     setGeneratingContactId(contactId);
@@ -308,7 +313,7 @@ export const ContactsTable: React.FC<ContactsTableProps> = ({
       )}
 
       {/* Filters Bar */}
-      <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+      {!hideFilters && <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-wrap items-center justify-between gap-3 text-xs">
         {/* Search */}
         <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
@@ -363,7 +368,7 @@ export const ContactsTable: React.FC<ContactsTableProps> = ({
           />
           <span>Apenas com vagas</span>
         </label>
-      </div>
+      </div>}
 
       {/* Main Table */}
       <div className="bg-slate-900/90 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
@@ -407,6 +412,7 @@ export const ContactsTable: React.FC<ContactsTableProps> = ({
               </div>
               <div className="rounded-lg bg-slate-900/80 border border-slate-800 p-2.5 min-w-0">
                 <div className="break-all font-mono text-xs font-semibold text-cyan-200">{cnt.email}</div>
+                {cnt.emailDeliverability && <div className="mt-1 text-[10px] text-slate-400">Abstract: {cnt.emailDeliverability === 'DELIVERABLE' ? 'Entregável' : cnt.emailDeliverability === 'UNDELIVERABLE' ? 'Não entregável' : cnt.emailDeliverability === 'RISKY' ? 'Risco ou resultado inconclusivo' : 'Não verificado'}{cnt.emailQualityScore != null ? ` · qualidade ${Math.round(cnt.emailQualityScore * 100)}%` : ''}</div>}
                 <button type="button" onClick={() => handleCopyText(`recipient_${cnt.id}`, cnt.email)} className="mt-1 inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-cyan-300 bg-slate-800 hover:bg-slate-700">{copiedKey === `recipient_${cnt.id}` ? <><Check className="w-3 h-3" /> Copiado</> : <><Copy className="w-3 h-3" /> Copiar email</>}</button>
               </div>
               <div className="min-w-0"><div className="mb-1">{getClassificationBadge(cnt.classification)}</div><p className="break-words text-[11px] leading-relaxed text-slate-300">{cnt.justification}</p>{cnt.evidenceSnippet && <p className="mt-2 break-words rounded bg-slate-900 p-2 text-[10px] italic text-slate-400 line-clamp-3">{cnt.evidenceSnippet}</p>}<a href={cnt.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] text-blue-300">Ver fonte <ExternalLink className="w-3 h-3" /></a></div>
@@ -605,6 +611,7 @@ export const ContactsTable: React.FC<ContactsTableProps> = ({
                           >
                             {cnt.email}
                           </div>
+                          {cnt.emailDeliverability && <div className="mt-1 text-[10px] text-slate-400">Abstract: {cnt.emailDeliverability === 'DELIVERABLE' ? 'Entregável' : cnt.emailDeliverability === 'UNDELIVERABLE' ? 'Não entregável' : cnt.emailDeliverability === 'RISKY' ? 'Risco ou resultado inconclusivo' : 'Não verificado'}{cnt.emailQualityScore != null ? ` · qualidade ${Math.round(cnt.emailQualityScore * 100)}%` : ''}</div>}
                           <button type="button"
                             onClick={() => handleCopyText(`recipient_${cnt.id}`, cnt.email)}
                             title="Copiar endereço de email" aria-label={`Copiar endereço de email ${cnt.email}`}
